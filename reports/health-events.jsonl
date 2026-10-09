@@ -1,0 +1,5 @@
+{"event": "state_change", "ts": 1791520066.168203, "iso": "2026-10-09T04:27:46", "region": "b", "from": "HEALTHY", "to": "UNHEALTHY", "reason": "status_503", "interval_s": 5.0, "threshold": 3, "consecutive_fails": 3}
+{"event": "state_change", "ts": 1791520082.6693053, "iso": "2026-10-09T04:28:02", "region": "a", "from": "HEALTHY", "to": "UNHEALTHY", "reason": "timeout", "interval_s": 5.0, "threshold": 3, "consecutive_fails": 3}
+{"event": "state_change", "ts": 1791521079.7632983, "iso": "2026-10-09T04:44:39", "region": "b", "from": "HEALTHY", "to": "UNHEALTHY", "reason": "status_503", "interval_s": 5.0, "threshold": 3, "consecutive_fails": 3}
+{"event": "state_change", "ts": 1791521096.5712972, "iso": "2026-10-09T04:44:56", "region": "a", "from": "HEALTHY", "to": "UNHEALTHY", "reason": "timeout", "interval_s": 5.0, "threshold": 3, "consecutive_fails": 3}
+{"event": "state_change", "ts": 1791521106.8189435, "iso": "2026-10-09T04:45:06", "region": "b", "from": "UNHEALTHY", "to": "HEALTHY", "reason": "ready", "interval_s": 5.0, "threshold": 3, "consecutive_fails": 0}

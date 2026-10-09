@@ -29,13 +29,92 @@ URL = {"a": "http://127.0.0.1:8001", "b": "http://127.0.0.1:8002"}
 
 
 def probe(region: str, timeout: float) -> tuple[bool, str]:
-    """TODO: trả về (ready, reason). Timeout PHẢI có — netblock làm request treo mãi."""
-    raise NotImplementedError
+    """Kiểm tra /readyz của một region.
+
+    Trả về (ready, reason):
+    - ready=True nếu status_code == 200
+    - ready=False nếu timeout hoặc status != 200
+    """
+    base = URL.get(region, "http://127.0.0.1:8001" if region == "a" else "http://127.0.0.1:8002")
+    url = f"{base}/readyz"
+    try:
+        with httpx.Client(timeout=timeout) as client:
+            resp = client.get(url)
+            if resp.status_code == 200:
+                return True, "ready"
+            return False, f"status_{resp.status_code}"
+    except httpx.TimeoutException:
+        return False, "timeout"
+    except httpx.ConnectError:
+        return False, "connect_error"
+    except Exception as e:
+        return False, type(e).__name__
 
 
 def run(interval: float, timeout: float, threshold: int, duration: float, out: pathlib.Path):
-    """TODO: vòng lặp poll + phát hiện transition + ghi JSONL."""
-    raise NotImplementedError
+    """Vòng lặp poll + phát hiện transition + ghi JSONL.
+
+    Mỗi lần trạng thái thay đổi (HEALTHY <-> UNHEALTHY):
+    - Ghi 1 dòng JSONL có: ts, iso, region, to, reason, interval_s, threshold, consecutive_fails
+    - Không ghi mỗi lần poll (log sẽ ngập)
+    """
+    out.parent.mkdir(parents=True, exist_ok=True)
+    state = {"a": "HEALTHY", "b": "HEALTHY"}
+    consecutive_fails = {"a": 0, "b": 0}
+    end_time = time.time() + duration
+
+    with out.open("a", encoding="utf-8") as f:
+        while time.time() < end_time:
+            loop_start = time.time()
+            for r in ["a", "b"]:
+                ready, reason = probe(r, timeout)
+                if ready:
+                    consecutive_fails[r] = 0
+                    if state[r] == "UNHEALTHY":
+                        state[r] = "HEALTHY"
+                        now = time.time()
+                        rec = {
+                            "event": "state_change",
+                            "ts": now,
+                            "iso": time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime(now)),
+                            "region": r,
+                            "from": "UNHEALTHY",
+                            "to": "HEALTHY",
+                            "reason": reason,
+                            "interval_s": interval,
+                            "threshold": threshold,
+                            "consecutive_fails": 0,
+                        }
+                        f.write(json.dumps(rec) + "\n")
+                        f.flush()
+                        print("HEALTH", json.dumps(rec))
+                else:
+                    consecutive_fails[r] += 1
+                    if state[r] == "HEALTHY" and consecutive_fails[r] >= threshold:
+                        state[r] = "UNHEALTHY"
+                        now = time.time()
+                        rec = {
+                            "event": "state_change",
+                            "ts": now,
+                            "iso": time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime(now)),
+                            "region": r,
+                            "from": "HEALTHY",
+                            "to": "UNHEALTHY",
+                            "reason": reason,
+                            "interval_s": interval,
+                            "threshold": threshold,
+                            "consecutive_fails": consecutive_fails[r],
+                        }
+                        f.write(json.dumps(rec) + "\n")
+                        f.flush()
+                        print("HEALTH", json.dumps(rec))
+
+            elapsed = time.time() - loop_start
+            sleep_time = max(0.0, interval - elapsed)
+            if sleep_time > 0 and time.time() + sleep_time <= end_time:
+                time.sleep(sleep_time)
+            elif time.time() >= end_time:
+                break
 
 
 if __name__ == "__main__":

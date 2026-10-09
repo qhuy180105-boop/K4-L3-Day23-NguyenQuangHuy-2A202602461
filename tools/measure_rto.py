@@ -18,7 +18,7 @@ def jsonl(p) -> list[dict]:
     if not p.exists():
         return []
     out = []
-    for i, line in enumerate(p.read_text().splitlines(), 1):
+    for i, line in enumerate(p.read_text(encoding="utf-8").splitlines(), 1):
         if not line.strip():
             continue
         try:

@@ -65,14 +65,26 @@ def is_alive(region: str, timeout=1.5) -> bool:
 
 def pid_of(region: str) -> int | None:
     f = PID_DIR / f"region-{region}.pid"
-    if not f.exists():
-        return None
-    pid = int(f.read_text().strip())
+    if f.exists():
+        try:
+            pid = int(f.read_text().strip())
+            import psutil
+            if psutil.pid_exists(pid):
+                return pid
+        except Exception:
+            pass
+    # Fallback: tim process dang listen tren port
+    port = 8001 if region == "a" else 8002
     try:
-        os.kill(pid, 0)
-        return pid
-    except OSError:
-        return None
+        import psutil
+        for conn in psutil.net_connections(kind="inet"):
+            if conn.laddr.port == port and conn.status == "LISTEN" and conn.pid:
+                PID_DIR.mkdir(parents=True, exist_ok=True)
+                f.write_text(str(conn.pid))
+                return conn.pid
+    except Exception:
+        pass
+    return None
 
 
 def kill(region: str, mode: str, backend: str, force_both: bool, mock: bool):
@@ -96,7 +108,15 @@ def kill(region: str, mode: str, backend: str, force_both: bool, mock: bool):
         # netblock: SIGSTOP -> TCP handshake vẫn xong nhưng không ai trả lời => request TREO
         #           (đúng hành vi của iptables DROP ở tầng app)
         # stop    : SIGKILL -> cổng đóng => ConnectError ngay
-        os.kill(pid, signal.SIGSTOP if mode == "netblock" else signal.SIGKILL)
+        if hasattr(signal, "SIGSTOP"):
+            os.kill(pid, signal.SIGSTOP if mode == "netblock" else signal.SIGKILL)
+        else:
+            import psutil
+            proc = psutil.Process(pid)
+            if mode == "netblock":
+                proc.suspend()
+            else:
+                proc.kill()
     else:
         svc = f"serving-{region}"
         if mode == "stop":
@@ -111,7 +131,11 @@ def restore(region: str, backend: str):
     if backend == "bare":
         pid = pid_of(region)
         if pid:
-            os.kill(pid, signal.SIGCONT)
+            if hasattr(signal, "SIGCONT"):
+                os.kill(pid, signal.SIGCONT)
+            else:
+                import psutil
+                psutil.Process(pid).resume()
             return event(action="restore", region=region, method="SIGCONT", pid=pid)
         return event(action="restore", region=region, method="need_manual_start",
                      note="process da bi SIGKILL, chay `make up-bare` lai")
